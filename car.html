@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>HORIZON DRIVE // MANUAL EDITION</title>
+    
+    <!-- Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              syncopate: ['Syncopate', 'sans-serif'],
+              rajdhani: ['Rajdhani', 'sans-serif'],
+            },
+            colors: {
+              neon: {
+                cyan: '#00f3ff',
+                magenta: '#ff00ff',
+                yellow: '#fff700',
+              },
+              glass: 'rgba(0, 0, 0, 0.9)',
+            },
+            backgroundImage: {
+              'radial-gradient': 'radial-gradient(circle at center, var(--tw-gradient-stops))',
+            },
+            animation: {
+                'bounce-in': 'bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                'pulse-fast': 'pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+                bounceIn: {
+                    '0%': { transform: 'translate(-50%, -50%) scale(0.3)', opacity: 0 },
+                    '100%': { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+                }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #020005;
+        overflow: hidden;
+        touch-action: none;
+        user-select: none;
+      }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: #111; }
+      ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #555; }
+      
+      .clip-path-polygon {
+        clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="typescript,react">
+        const { useState, useEffect, useRef } = React;
+
+        // --- CONSTANTS & TYPES ---
+
+        const GameState = {
+            MENU: 'MENU',
+            RACING: 'RACING',
+            GAME_OVER: 'GAME_OVER'
+        };
+
+        const GameMode = {
+            CIRCUIT: 'CIRCUIT',
+            DRIFT: 'DRIFT',
+            DRAG: 'DRAG',
+            RALLY: 'RALLY',
+            SPRINT: 'SPRINT'
+        };
+
+        const CONFIG = {
+            roadW: 2200,
+            segL: 200,
+            camH: 1000,
+            drawDist: 300,
+            fov: 100,
+            playerZ: 700,
+            maxLaps: 3,
+            creditsWin: 500,
+            upgradeCost: 150,
+            gravity: 9.8,
+            centrifugal: 0.3,
+            maxRPM: 9000,
+            shiftPoint: 7500,
+        };
+
+        const GEAR_RATIOS = [0, 3.8, 2.4, 1.8, 1.4, 1.1, 0.9]; // Neutral + 6 gears
+
+        const INITIAL_CARS = [
+            { 
+                id: 0, 
+                name: 'PHANTOM S', 
+                type: 'BALANCED',
+                color: '#ff00ff', 
+                stats: { speed: 3, accel: 3, grip: 3 }, 
+                base: { maxSpeed: 24000, accel: 6000, grip: 2.2 } 
+            },
+            { 
+                id: 1, 
+                name: 'NEON WING', 
+                type: 'SPEED',
+                color: '#00f3ff', 
+                stats: { speed: 5, accel: 4, grip: 1 }, 
+                base: { maxSpeed: 30000, accel: 8000, grip: 1.4 } 
+            },
+            { 
+                id: 2, 
+                name: 'APEX GT', 
+                type: 'HANDLING',
+                color: '#fff700', 
+                stats: { speed: 2, accel: 2, grip: 5 }, 
+                base: { maxSpeed: 19000, accel: 4500, grip: 4.0 } 
+            },
+            {
+                id: 3,
+                name: 'THUNDER V8',
+                type: 'MUSCLE',
+                color: '#ff3300',
+                stats: { speed: 4, accel: 5, grip: 1 },
+                base: { maxSpeed: 26000, accel: 9000, grip: 1.0 } 
+            },
+            {
+                id: 4,
+                name: 'STREET KING',
+                type: 'DRIFT',
+                color: '#00ff66',
+                stats: { speed: 3, accel: 4, grip: 2 },
+                base: { maxSpeed: 22000, accel: 7000, grip: 1.8 } 
+            },
+            {
+                id: 5,
+                name: 'HYPERION X',
+                type: 'HYPER',
+                color: '#ffffff',
+                stats: { speed: 5, accel: 5, grip: 5 },
+                base: { maxSpeed: 34000, accel: 10000, grip: 3.0 } 
+            }
+        ];
+
+        const MODES = [
+            { id: GameMode.CIRCUIT, label: 'CIRCUIT', desc: 'Standard 3 Lap Race', color: '#00f3ff' },
+            { id: GameMode.SPRINT, label: 'SPRINT', desc: 'Point to Point', color: '#ff00ff' },
+            { id: GameMode.DRAG, label: 'DRAG', desc: 'Manual Shifting Required', color: '#ff3300' },
+            { id: GameMode.DRIFT, label: 'DRIFT', desc: 'Earn Points by Sliding', color: '#fff700' },
+            { id: GameMode.RALLY, label: 'RALLY', desc: 'Offroad & Bumps', color: '#00ff66' },
+        ];
+
+        // --- ENGINE ---
+
+        class RacingEngine {
+            constructor(canvas, selectedCar, mode, onHUDUpdate, onGameEnd) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d', { alpha: false });
+                this.activeCar = selectedCar;
+                this.mode = mode;
+                this.onHUDUpdate = onHUDUpdate;
+                this.onGameEnd = onGameEnd;
+                
+                this.width = 0;
+                this.height = 0;
+                this.running = false;
+                
+                // State
+                this.track = [];
+                this.traffic = [];
+                this.trackLength = 0;
+                this.timer = 0;
+                this.lap = 1;
+                this.shake = 0;
+                this.camD = 0;
+                this.lastFrameTime = 0;
+                this.lastShiftTime = 0;
+                
+                this.player = { 
+                    x: 0, z: 0, y: 0, 
+                    speed: 0, nitro: 100, drift: 0, lean: 0, bounce: 0, 
+                    gear: 1, rpm: 1000, driftScore: 0 
+                };
+
+                this.keys = {};
+                
+                this.init();
+            }
+
+            init() {
+                this.resize();
+                this.bindInput();
+                this.buildTrack();
+                this.resetGame();
+            }
+
+            bindInput() {
+                this.handleKeyDown = (e) => {
+                    this.keys[e.key.toLowerCase()] = true;
+                    this.handleInput(e.key.toLowerCase());
+                };
+                this.handleKeyUp = (e) => {
+                    this.keys[e.key.toLowerCase()] = false;
+                };
+                this.handleResize = () => this.resize();
+
+                window.addEventListener('keydown', this.handleKeyDown);
+                window.addEventListener('keyup', this.handleKeyUp);
+                window.addEventListener('resize', this.handleResize);
+            }
+
+            cleanup() {
+                this.running = false;
+                window.removeEventListener('keydown', this.handleKeyDown);
+                window.removeEventListener('keyup', this.handleKeyUp);
+                window.removeEventListener('resize', this.handleResize);
+            }
+
+            handleInput(key) {
+                const now = performance.now();
+                
+                // MANUAL SHIFTING LOGIC FOR ALL MODES
+                // L Key for Gear Up
+                if (key === 'l') {
+                    if (now - this.lastShiftTime > 200 && this.player.gear < 6) {
+                        this.player.gear++;
+                        this.player.rpm = Math.max(2000, this.player.rpm * 0.6);
+                        this.lastShiftTime = now;
+                        this.shake += 5;
+                    }
+                }
+                // K Key for Gear Down
+                if (key === 'k') {
+                    if (now - this.lastShiftTime > 200 && this.player.gear > 1) {
+                        this.player.gear--;
+                        this.player.rpm = Math.min(CONFIG.maxRPM, this.player.rpm * 1.4);
+                        this.lastShiftTime = now;
+                    }
+                }
+            }
+
+            resize() {
+                this.width = this.canvas.width = window.innerWidth;
+                this.height = this.canvas.height = window.innerHeight;
+                this.camD = 1 / Math.tan((CONFIG.fov / 2) * Math.PI / 180);
+            }
+
+            buildTrack() {
+                this.track = [];
+                let length = 3000;
+                
+                if (this.mode === GameMode.DRAG) length = 1500;
+                if (this.mode === GameMode.RALLY) length = 4000;
+                
+                for(let i=0; i<length; i++) {
+                    let curve = 0;
+                    let slope = 0;
+
+                    if (this.mode === GameMode.DRAG) {
+                        curve = 0;
+                    } else if (this.mode === GameMode.DRIFT) {
+                        if (i > 100 && i < 600) curve = 4;
+                        if (i > 700 && i < 1200) curve = -5;
+                        if (i > 1300 && i < 1800) curve = 6;
+                        if (i > 2000 && i < 2500) curve = -4;
+                    } else if (this.mode === GameMode.RALLY) {
+                        if (i % 200 < 100) slope = Math.sin(i/30) * 40;
+                        if (i > 200 && i < 800) curve = 2;
+                        if (i > 1000 && i < 2000) curve = -3;
+                    } else {
+                        if (i > 300 && i < 600) curve = 2.5;
+                        if (i > 900 && i < 1200) curve = -3.5;
+                        if (i > 1600 && i < 1900) curve = 5;
+                    }
+
+                    const isAlt = (Math.floor(i / 6) % 2) === 0;
+                    let roadColor = isAlt ? '#080808' : '#040404';
+                    let groundColor = '#050010'; 
+                    
+                    if (this.mode === GameMode.RALLY) {
+                        roadColor = isAlt ? '#3a2e22' : '#33281d'; 
+                        groundColor = '#1a120b';
+                    }
+
+                    this.track.push({
+                        index: i,
+                        p1: { world: { z: i * CONFIG.segL, y: 0 }, camera: {}, screen: {} },
+                        p2: { world: { z: (i+1) * CONFIG.segL, y: 0 }, camera: {}, screen: {} },
+                        curve: curve,
+                        slope: slope,
+                        color: { 
+                        road: roadColor, 
+                        rumble: isAlt ? this.activeCar.color : '#222', 
+                        lane: isAlt ? '#666' : 'transparent',
+                        ground: groundColor
+                        }
+                    });
+                }
+                this.trackLength = this.track.length * CONFIG.segL;
+            }
+
+            resetGame() {
+                this.traffic = [];
+                this.timer = 0;
+                this.lap = 1;
+                this.shake = 0;
+                this.player = { 
+                    x: 0, z: 0, y: 0, 
+                    speed: 0, nitro: 100, drift: 0, lean: 0, bounce: 0, 
+                    gear: 1, rpm: 1000, driftScore: 0 
+                };
+                
+                if (this.mode !== GameMode.DRAG) {
+                    for(let i=0; i<30; i++) {
+                        this.traffic.push({
+                            z: 10000 + Math.random() * (this.trackLength - 10000),
+                            x: (Math.random() * 1.8) - 0.9,
+                            speed: 8000 + Math.random() * 10000,
+                            color: ['#ff00ff', '#00f3ff', '#fff700'][Math.floor(Math.random()*3)],
+                        });
+                    }
+                }
+                this.lastFrameTime = performance.now();
+            }
+
+            start() {
+                if (this.running) return;
+                this.running = true;
+                this.lastFrameTime = performance.now();
+                this.loop();
+            }
+
+            loop() {
+                if (!this.running) return;
+                const now = performance.now();
+                const dt = Math.min(0.1, (now - this.lastFrameTime) / 1000); 
+                this.lastFrameTime = now;
+                this.update(dt);
+                this.render();
+                requestAnimationFrame(() => this.loop());
+            }
+
+            update(dt) {
+                const p = this.player;
+                const c = this.activeCar;
+                
+                const ratio = GEAR_RATIOS[p.gear];
+                const maxSpeedInGear = (c.base.maxSpeed * ratio) / 3.8;
+                
+                // RPM
+                if (this.keys['w'] || this.keys['arrowup']) {
+                    p.rpm = Math.min(CONFIG.maxRPM, p.rpm + dt * 4000);
+                } else {
+                    p.rpm = Math.max(1000, p.rpm - dt * 3000);
+                }
+                if (p.speed > 100) {
+                    p.rpm = Math.max(p.rpm, (p.speed / maxSpeedInGear) * (CONFIG.maxRPM - 500));
+                }
+                p.rpm = Math.min(CONFIG.maxRPM, p.rpm);
+
+                // Auto Shift REMOVED - All modes are now manual
+                // We rely entirely on handleInput keys L and K
+
+                // Physics
+                const torque = (p.rpm > 3000 && p.rpm < 7000) ? 1.2 : 0.8; 
+                const accelBase = c.base.accel + (c.stats.accel * 800);
+                const effectiveAccel = accelBase * torque * (1 / p.gear);
+
+                const isBraking = this.keys['s'] || this.keys['arrowdown'];
+                const isBoosting = this.keys[' '] && p.nitro > 0;
+                
+                if ((this.keys['w'] || this.keys['arrowup']) && p.rpm < CONFIG.maxRPM - 100) {
+                    p.speed += effectiveAccel * dt;
+                } else if (isBraking) {
+                    p.speed -= 15000 * dt;
+                } else {
+                    p.speed -= 2000 * dt;
+                }
+
+                if (isBoosting) {
+                    p.nitro = Math.max(0, p.nitro - dt * 30);
+                    p.speed += 8000 * dt;
+                    this.shake = Math.min(this.shake + 1.2, 10);
+                    p.rpm = Math.min(CONFIG.maxRPM, p.rpm + 500);
+                } else {
+                    p.nitro = Math.min(100, p.nitro + dt * 3);
+                    this.shake *= 0.9;
+                }
+
+                const absMax = c.base.maxSpeed + (c.stats.speed * 1500);
+                p.speed = Math.max(0, Math.min(p.speed, absMax));
+                p.z += p.speed * dt;
+
+                // Lateral
+                const grip = c.base.grip + (c.stats.grip * 0.4) + (this.mode === GameMode.DRIFT ? -1.0 : 0);
+                const steerStr = Math.min(1, p.speed / 5000);
+                
+                if (this.keys['a'] || this.keys['arrowleft']) {
+                    p.x -= grip * dt * steerStr * 1.5;
+                    p.drift = -1;
+                    p.lean = Math.max(-20, p.lean - 150 * dt);
+                    if (this.mode === GameMode.DRIFT && p.speed > 8000) {
+                        p.driftScore += Math.abs(p.lean) * dt * 10;
+                        p.nitro += dt * 5; 
+                    }
+                } else if (this.keys['d'] || this.keys['arrowright']) {
+                    p.x += grip * dt * steerStr * 1.5;
+                    p.drift = 1;
+                    p.lean = Math.min(20, p.lean + 150 * dt);
+                    if (this.mode === GameMode.DRIFT && p.speed > 8000) {
+                        p.driftScore += Math.abs(p.lean) * dt * 10;
+                        p.nitro += dt * 5;
+                    }
+                } else {
+                    p.drift *= 0.9;
+                    p.lean *= 0.9;
+                }
+
+                const currentSegIdx = Math.floor(p.z / CONFIG.segL) % this.track.length;
+                const seg = this.track[currentSegIdx];
+                p.y = seg.slope * 15;
+                p.x -= steerStr * seg.curve * 0.035;
+                
+                if (this.mode === GameMode.RALLY) {
+                    p.bounce = Math.sin(p.z * 0.05) * (p.speed / 3000) + (Math.random() * 2);
+                } else {
+                    p.bounce = Math.sin(Date.now() * 0.02) * (p.speed / 10000);
+                }
+
+                if (Math.abs(p.x) > 1.2) {
+                    if (this.mode !== GameMode.RALLY) p.speed -= 10000 * dt; 
+                    this.shake += (p.speed / 5000);
+                }
+
+                let collision = false;
+                this.traffic.forEach(t => {
+                    t.z += t.speed * dt;
+                    if (t.z > this.trackLength) t.z -= this.trackLength;
+                    if (Math.abs(p.z + CONFIG.playerZ - t.z) < 250 && Math.abs(p.x - t.x) < 0.7) {
+                        p.speed *= 0.5;
+                        this.shake = 30;
+                        collision = true;
+                        p.driftScore = Math.max(0, p.driftScore - 500);
+                    }
+                });
+                if (collision) this.onHUDUpdate({ announcement: "CRASH!" });
+
+                this.timer += dt;
+                if (p.z >= this.trackLength) {
+                    p.z -= this.trackLength;
+                    this.lap++;
+                    if (this.lap > CONFIG.maxLaps) {
+                        this.running = false;
+                        this.onGameEnd(true);
+                    } else {
+                        this.onHUDUpdate({ announcement: `LAP ${this.lap}` });
+                    }
+                }
+
+                this.onHUDUpdate({
+                    speed: Math.floor(p.speed / 100),
+                    nitro: Math.floor(p.nitro),
+                    lap: this.lap,
+                    time: this.timer,
+                    gear: p.gear,
+                    rpm: Math.floor(p.rpm),
+                    driftScore: Math.floor(p.driftScore),
+                    mode: this.mode
+                });
+            }
+
+            project(p, camX, camY, camZ) {
+                p.camera.x = (p.world.x || 0) - camX;
+                p.camera.y = (p.world.y || 0) - camY;
+                p.camera.z = (p.world.z || 0) - camZ;
+                p.screen.scale = this.camD / Math.max(1, p.camera.z);
+                p.screen.x = (this.width / 2) + (p.screen.scale * p.camera.x * this.width / 2);
+                p.screen.y = (this.height / 2) - (p.screen.scale * p.camera.y * this.height / 2);
+                p.screen.w = p.screen.scale * CONFIG.roadW * this.width / 2;
+            }
+
+            render() {
+                const ctx = this.ctx;
+                const p = this.player;
+                
+                ctx.fillStyle = this.mode === GameMode.RALLY ? '#2a1a0a' : '#050010'; 
+                ctx.fillRect(0, 0, this.width, this.height);
+
+                if (this.mode === GameMode.RALLY) {
+                    ctx.fillStyle = '#ffaa00';
+                    ctx.beginPath(); ctx.arc(this.width * 0.8, 100, 60, 0, Math.PI*2); ctx.fill();
+                }
+
+                const baseIdx = Math.floor(p.z / CONFIG.segL);
+                let x = 0;
+                let dx = 0;
+                let maxY = this.height;
+
+                ctx.save();
+                if (this.shake > 0) {
+                    ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+                }
+
+                for(let n = 0; n < CONFIG.drawDist; n++) {
+                    const idx = (baseIdx + n) % this.track.length;
+                    const seg = this.track[idx];
+                    const loop = (baseIdx + n >= this.track.length) ? this.trackLength : 0;
+                    const camY = CONFIG.camH + p.y + (this.track[baseIdx%this.track.length].slope * 15);
+                    
+                    this.project(seg.p1, (p.x * CONFIG.roadW) - x, camY, p.z - loop);
+                    this.project(seg.p2, (p.x * CONFIG.roadW) - x - dx, camY, p.z - loop);
+
+                    x += dx; 
+                    dx += seg.curve;
+
+                    if (seg.p1.camera.z <= 0 || seg.p1.screen.y >= maxY) continue;
+
+                    const s1 = seg.p1.screen;
+                    const s2 = seg.p2.screen;
+
+                    ctx.fillStyle = seg.color.ground;
+                    ctx.fillRect(0, s2.y, this.width, s1.y - s2.y);
+
+                    this.drawPoly(s1.x - s1.w, s1.y, s1.x + s1.w, s1.y, s2.x + s2.w, s2.y, s2.x - s2.w, s2.y, seg.color.road);
+                    
+                    const r1 = s1.w / 12;
+                    const r2 = s2.w / 12;
+                    this.drawPoly(s1.x - s1.w - r1, s1.y, s1.x - s1.w, s1.y, s2.x - s2.w, s2.y, s2.x - s2.w - r2, s2.y, seg.color.rumble);
+                    this.drawPoly(s1.x + s1.w + r1, s1.y, s1.x + s1.w, s1.y, s2.x + s2.w, s2.y, s2.x + s2.w + r2, s2.y, seg.color.rumble);
+
+                    if (seg.color.lane) {
+                        const l1 = s1.w / 30;
+                        const l2 = s2.w / 30;
+                        this.drawPoly(s1.x - l1, s1.y, s1.x + l1, s1.y, s2.x + l2, s2.y, s2.x - l2, s2.y, seg.color.lane);
+                    }
+
+                    maxY = s1.y;
+                }
+
+                this.traffic.forEach(t => {
+                    if(t.z > p.z && t.z < p.z + (CONFIG.drawDist * CONFIG.segL)) {
+                        const proj = { world: { x: t.x * CONFIG.roadW, y: 0, z: t.z }, camera: {}, screen: {} };
+                        this.project(proj, p.x * CONFIG.roadW, CONFIG.camH, p.z);
+                        if(proj.screen.scale > 0) {
+                            this.drawCar(proj.screen.x, proj.screen.y, proj.screen.scale, t.color, 0, false);
+                        }
+                    }
+                });
+
+                const carScale = 1.3 + (Math.sin(Date.now() * 0.01) * 0.01);
+                this.drawCar(this.width / 2, this.height - 100 + p.bounce, carScale, this.activeCar.color, p.lean, true);
+
+                ctx.restore();
+            }
+
+            drawCar(x, y, scale, color, lean, isPlayer) {
+                const ctx = this.ctx;
+                const isBraking = isPlayer && (this.keys['s'] || this.keys['arrowdown']);
+                const isNitro = isPlayer && this.keys[' '] && this.player.nitro > 0;
+
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                ctx.rotate(lean * Math.PI / 180);
+
+                const glowSize = isNitro ? 80 : 40;
+                const grd = ctx.createRadialGradient(0, 15, 0, 0, 15, glowSize);
+                grd.addColorStop(0, color + '66');
+                grd.addColorStop(1, 'transparent');
+                ctx.fillStyle = grd;
+                ctx.fillRect(-60, 0, 120, 30);
+
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.beginPath(); ctx.ellipse(0, 15, 55, 10, 0, 0, Math.PI * 2); ctx.fill();
+
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(-50, 0); ctx.lineTo(50, 0); ctx.lineTo(45, -20); ctx.lineTo(-45, -20);
+                ctx.closePath(); ctx.fill();
+                
+                ctx.fillStyle = '#111';
+                ctx.beginPath();
+                ctx.moveTo(-40, -20); ctx.lineTo(40, -20); ctx.lineTo(30, -35); ctx.lineTo(-30, -35);
+                ctx.closePath(); ctx.fill();
+
+                ctx.fillStyle = isBraking ? '#ff0000' : '#550000';
+                ctx.shadowBlur = isBraking ? 20 : 0;
+                ctx.shadowColor = '#ff0000';
+                ctx.fillRect(-45, -5, 15, 5);
+                ctx.fillRect(30, -5, 15, 5);
+                ctx.shadowBlur = 0;
+
+                if (isNitro && isPlayer) {
+                    ctx.fillStyle = '#00ffff';
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = '#00ffff';
+                    ctx.beginPath();
+                    ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.lineTo(0, 40 + Math.random()*20);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.restore();
+            }
+
+            drawPoly(x1, y1, x2, y2, x3, y3, x4, y4, color) {
+                this.ctx.fillStyle = color;
+                this.ctx.beginPath();
+                this.ctx.moveTo(x1, y1); this.ctx.lineTo(x2, y2);
+                this.ctx.lineTo(x3, y3); this.ctx.lineTo(x4, y4);
+                this.ctx.fill();
+            }
+        }
+
+        // --- COMPONENTS ---
+
+        const StatBar = ({ label, value, color }) => (
+            <div className="mb-2">
+                <div className="flex justify-between text-xs text-gray-400 font-rajdhani uppercase tracking-wider mb-1">
+                <span>{label}</span>
+                <span>LVL {value}</span>
+                </div>
+                <div className="h-2 bg-gray-900 rounded-full overflow-hidden border border-gray-800">
+                <div 
+                    className="h-full transition-all duration-300"
+                    style={{ width: `${value * 20}%`, backgroundColor: color, boxShadow: `0 0 10px ${color}` }}
+                />
+                </div>
+            </div>
+        );
+
+        const CarCard = ({ car, isSelected, onSelect, canUpgrade, onUpgrade }) => {
+            return (
+                <div 
+                onClick={onSelect}
+                className={`
+                    relative flex-none w-[300px] bg-white/5 backdrop-blur-md border rounded-xl p-6 cursor-pointer
+                    transition-all duration-300 transform 
+                    ${isSelected ? 'border-neon-cyan scale-105 shadow-[0_0_30px_rgba(0,243,255,0.2)] bg-white/10' : 'border-white/10 hover:border-white/30 hover:scale-100'}
+                `}
+                >
+                <div className="flex justify-between items-start mb-4">
+                    <div 
+                    className="font-syncopate text-lg font-bold tracking-widest uppercase"
+                    style={{ color: isSelected ? car.color : 'white' }}
+                    >
+                    {car.name}
+                    </div>
+                    <div className="text-[10px] bg-white/10 px-2 py-1 rounded border border-white/20">
+                    {car.type}
+                    </div>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                    <StatBar label="Top Speed" value={car.stats.speed} color={car.color} />
+                    <StatBar label="Acceleration" value={car.stats.accel} color={car.color} />
+                    <StatBar label="Handling" value={car.stats.grip} color={car.color} />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                    {['speed', 'accel', 'grip'].map(stat => (
+                        <button
+                            key={stat}
+                            onClick={(e) => { e.stopPropagation(); onUpgrade(stat); }}
+                            disabled={!canUpgrade || car.stats[stat] >= 5}
+                            className={`
+                                py-2 px-1 text-[10px] font-rajdhani font-bold rounded border
+                                transition-all uppercase
+                                ${!canUpgrade || car.stats[stat] >= 5 
+                                    ? 'opacity-30 cursor-not-allowed border-transparent bg-gray-800' 
+                                    : 'border-white/20 hover:bg-white hover:text-black hover:border-white'
+                                }
+                            `}
+                        >
+                            Up {stat}
+                        </button>
+                    ))}
+                </div>
+                </div>
+            );
+        };
+
+        const Garage = ({ cars, selectedCarId, selectedMode, credits, onSelectCar, onSelectMode, onUpgrade, onColorChange, onStartRace }) => {
+            const selectedCar = cars.find(c => c.id === selectedCarId) || cars[0];
+
+            return (
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-between bg-radial-gradient from-[#110022] to-black py-8">
+                <div className="text-center">
+                    <h1 className="font-syncopate text-4xl md:text-5xl text-white tracking-[0.2em] mb-2 drop-shadow-[0_0_20px_rgba(0,243,255,0.8)]">
+                    Horizon Drive
+                    </h1>
+                    <div className="font-syncopate text-neon-yellow text-xl tracking-widest drop-shadow-[0_0_10px_rgba(255,247,0,0.5)]">
+                    CREDITS: {credits.toString().padStart(4, '0')}
+                    </div>
+                </div>
+
+                <div className="flex-1 w-full max-w-7xl flex flex-col md:flex-row gap-8 items-center justify-center p-4 overflow-hidden">
+                    <div className="w-full md:w-1/4 space-y-2">
+                    <h3 className="text-white font-syncopate text-sm opacity-50 mb-4">SELECT MODE</h3>
+                    {MODES.filter(m => m.id !== GameMode.SPRINT).map(mode => (
+                        <button
+                        key={mode.id}
+                        onClick={() => onSelectMode(mode.id)}
+                        className={`
+                            w-full text-left p-4 rounded border transition-all relative overflow-hidden group
+                            ${selectedMode === mode.id ? 'border-white bg-white/10' : 'border-white/10 hover:border-white/40'}
+                        `}
+                        >
+                            <div className={`absolute left-0 top-0 bottom-0 w-1 transition-all ${selectedMode === mode.id ? 'bg-current' : 'bg-transparent'}`} style={{ color: mode.color }} />
+                            <div className="font-syncopate font-bold text-lg" style={{ color: selectedMode === mode.id ? mode.color : 'white' }}>{mode.label}</div>
+                            <div className="text-xs text-gray-400 font-rajdhani uppercase tracking-wider">{mode.desc}</div>
+                        </button>
+                    ))}
+                    </div>
+
+                    <div className="w-full md:w-3/4 flex flex-col h-full justify-center">
+                    <h3 className="text-white font-syncopate text-sm opacity-50 mb-4">SELECT VEHICLE</h3>
+                    <div className="flex gap-6 overflow-x-auto pb-8 snap-x">
+                        {cars.map(car => (
+                        <CarCard 
+                            key={car.id} 
+                            car={car} 
+                            isSelected={selectedCar.id === car.id} 
+                            onSelect={() => onSelectCar(car.id)}
+                            canUpgrade={credits >= CONFIG.upgradeCost}
+                            onUpgrade={(stat) => onUpgrade(car.id, stat)}
+                        />
+                        ))}
+                    </div>
+                    
+                    <div className="bg-black/40 backdrop-blur-md p-4 rounded-lg border border-white/10 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <span className="font-syncopate text-xs text-gray-300">CUSTOM PAINT</span>
+                            <div className="flex gap-2">
+                            {['#ff00ff', '#00f3ff', '#fff700', '#ff3300', '#00ff66', '#ffffff'].map(c => (
+                                <button 
+                                key={c}
+                                onClick={() => onColorChange(c)}
+                                className={`w-8 h-8 rounded-full border-2 ${selectedCar.color === c ? 'border-white scale-110' : 'border-transparent opacity-50'}`}
+                                style={{ backgroundColor: c }}
+                                />
+                            ))}
+                            </div>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                            Upgrade: {CONFIG.upgradeCost} CR
+                        </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button 
+                    onClick={onStartRace}
+                    className="
+                    group relative px-20 py-5 bg-white text-black font-syncopate font-bold text-2xl tracking-widest
+                    clip-path-polygon hover:bg-neon-cyan transition-all duration-300 transform hover:scale-105 hover:shadow-[0_0_30px_rgba(0,243,255,0.6)]
+                    mt-4
+                    "
+                >
+                    RACE
+                </button>
+                </div>
+            );
+        };
+
+        const HUD = ({ data, activeColor }) => {
+            const [announcement, setAnnouncement] = useState(null);
+
+            useEffect(() => {
+                if (data.announcement) {
+                setAnnouncement(data.announcement);
+                const timer = setTimeout(() => setAnnouncement(null), 1500);
+                return () => clearTimeout(timer);
+                }
+            }, [data.announcement]);
+
+            const rpmPercent = (data.rpm / CONFIG.maxRPM) * 100;
+
+            const formatTime = (time) => {
+                const m = Math.floor(time / 60);
+                const s = Math.floor(time % 60);
+                const ms = Math.floor((time % 1) * 100);
+                return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+            };
+            
+            return (
+                <div className="absolute inset-0 pointer-events-none p-4 md:p-8 flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                    <div className="bg-glass backdrop-blur-md px-6 py-3 rounded-sm border-l-4" style={{ borderColor: activeColor }}>
+                    <div className="text-[10px] tracking-[0.2em] font-bold mb-1" style={{ color: activeColor }}>LAP</div>
+                    <div className="font-syncopate text-2xl text-white">
+                        {data.lap}
+                        <span className="text-sm text-gray-500">/{data.maxLaps}</span>
+                    </div>
+                    </div>
+
+                    {data.mode === GameMode.DRIFT && (
+                        <div className="bg-glass backdrop-blur-md px-8 py-2 rounded-b-xl border-t-2 border-yellow-400">
+                            <div className="text-center text-xs text-yellow-400 font-bold tracking-widest">DRIFT SCORE</div>
+                            <div className="font-syncopate text-3xl text-white text-center">{data.driftScore}</div>
+                        </div>
+                    )}
+
+                    <div className="bg-glass backdrop-blur-md px-6 py-3 rounded-sm border-r-4" style={{ borderColor: activeColor }}>
+                    <div className="text-[10px] tracking-[0.2em] font-bold mb-1 text-right" style={{ color: activeColor }}>TIMER</div>
+                    <div className="font-syncopate text-2xl text-white tabular-nums">
+                        {formatTime(data.time)}
+                    </div>
+                    </div>
+                </div>
+
+                {announcement && (
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center animate-bounce-in z-20">
+                    <h2 
+                        className="font-syncopate text-6xl md:text-8xl italic font-bold text-white drop-shadow-[0_0_40px_rgba(255,255,255,0.5)]"
+                        style={{ textShadow: `0 0 30px ${activeColor}` }}
+                    >
+                        {announcement}
+                    </h2>
+                    </div>
+                )}
+
+                <div className="self-center w-full max-w-5xl flex items-end justify-between gap-8 mb-4">
+                    <div className="flex items-end gap-4">
+                        <div className="bg-black/80 border-2 border-white/20 p-2 w-20 h-24 flex flex-col items-center justify-center rounded">
+                            <span className="text-xs text-gray-500 font-bold mb-1">GEAR</span>
+                            <span className={`text-4xl font-syncopate font-bold ${data.rpm > 7500 ? 'text-red-500 animate-pulse-fast' : 'text-white'}`}>
+                                {data.gear === 0 ? 'N' : data.gear}
+                            </span>
+                        </div>
+
+                        <div className="flex flex-col">
+                            <div className="flex items-baseline gap-2">
+                                <div className="font-syncopate text-8xl italic font-bold leading-none text-white tabular-nums drop-shadow-lg">
+                                    {data.speed.toString().padStart(3, '0')}
+                                </div>
+                                <div className="font-syncopate text-xl font-bold" style={{ color: activeColor }}>KM/H</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 pb-4">
+                        <div className="flex justify-between text-xs font-bold font-rajdhani tracking-wider mb-1">
+                            <span className="text-gray-400">RPM x1000</span>
+                            <span className="text-red-500 animate-pulse-fast">MANUAL SHIFT</span>
+                        </div>
+                        
+                        <div className="flex gap-1 h-8 items-end">
+                            {Array.from({length: 20}).map((_, i) => {
+                                const threshold = (i / 20) * 100;
+                                const isActive = rpmPercent > threshold;
+                                const isRedline = i > 16;
+                                let barColor = isRedline ? '#ef4444' : (i > 12 ? '#eab308' : '#22c55e'); 
+                                if (!isActive) barColor = '#333';
+                                
+                                return (
+                                    <div 
+                                        key={i} 
+                                        className="flex-1 rounded-sm transition-all duration-75"
+                                        style={{ 
+                                            height: isActive ? `${40 + (i*3)}%` : '20%', 
+                                            backgroundColor: barColor,
+                                            boxShadow: isActive && isRedline ? '0 0 10px #ef4444' : 'none'
+                                        }} 
+                                    />
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="w-48 pb-2">
+                    <div className="flex justify-between text-xs font-bold mb-2 font-rajdhani tracking-wider">
+                        <span style={{ color: activeColor }}>NITRO</span>
+                        <span className="text-white">{data.nitro}%</span>
+                    </div>
+                    <div className="h-4 bg-white/10 border border-white/20 transform skew-x-[-12deg]">
+                        <div 
+                        className="h-full shadow-[0_0_20px_rgba(255,255,255,0.4)] transition-all duration-75"
+                        style={{ 
+                            width: `${data.nitro}%`, 
+                            background: `linear-gradient(90deg, #fff, ${activeColor})` 
+                        }}
+                        />
+                    </div>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        const RaceView = ({ car, mode, onRaceEnd }) => {
+            const canvasRef = useRef(null);
+            const engineRef = useRef(null);
+            const [hudState, setHudState] = useState({
+                speed: 0,
+                nitro: 100,
+                lap: 1,
+                time: 0,
+                maxLaps: CONFIG.maxLaps,
+                announcement: 'READY',
+                gear: 1,
+                rpm: 0,
+                driftScore: 0,
+                mode: mode
+            });
+
+            useEffect(() => {
+                if (!canvasRef.current) return;
+
+                engineRef.current = new RacingEngine(
+                    canvasRef.current,
+                    car,
+                    mode,
+                    (newState) => {
+                        setHudState(prev => ({ ...prev, ...newState }));
+                    },
+                    (won) => {
+                        onRaceEnd(won);
+                    }
+                );
+
+                engineRef.current.start();
+                
+                setTimeout(() => setHudState(prev => ({...prev, announcement: 'GO!'})), 1000);
+
+                return () => {
+                    if (engineRef.current) {
+                        engineRef.current.cleanup();
+                    }
+                };
+            }, [car, mode, onRaceEnd]);
+
+            return (
+                <div className="relative w-full h-full bg-black overflow-hidden">
+                <canvas ref={canvasRef} className="block w-full h-full" />
+                <HUD data={hudState} activeColor={car.color} />
+                
+                <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-black/50 px-4 py-2 rounded text-white text-xs border border-red-500 animate-pulse-fast">
+                    MANUAL SHIFT: 'L' TO UP / 'K' TO DOWN
+                </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [gameState, setGameState] = useState(GameState.MENU);
+            const [gameMode, setGameMode] = useState(GameMode.CIRCUIT);
+            const [credits, setCredits] = useState(500);
+            const [cars, setCars] = useState(INITIAL_CARS);
+            const [selectedCarId, setSelectedCarId] = useState(0);
+
+            const handleUpgrade = (carId, stat) => {
+                if (credits < CONFIG.upgradeCost) return;
+
+                setCars(prevCars => prevCars.map(c => {
+                if (c.id !== carId) return c;
+                if (c.stats[stat] >= 5) return c;
+                
+                const newStats = { ...c.stats, [stat]: c.stats[stat] + 1 };
+                setCredits(prev => prev - CONFIG.upgradeCost);
+                return { ...c, stats: newStats };
+                }));
+            };
+
+            const handleColorChange = (color) => {
+                setCars(prevCars => prevCars.map(c => 
+                c.id === selectedCarId ? { ...c, color } : c
+                ));
+            };
+
+            const handleRaceEnd = (won) => {
+                if (won) {
+                setCredits(prev => prev + CONFIG.creditsWin);
+                }
+                setGameState(GameState.MENU);
+            };
+
+            const activeCar = cars.find(c => c.id === selectedCarId) || cars[0];
+
+            return (
+                <div className="w-full h-screen overflow-hidden bg-black text-white font-rajdhani">
+                {gameState === GameState.MENU && (
+                    <Garage 
+                    cars={cars}
+                    credits={credits}
+                    selectedCarId={selectedCarId}
+                    selectedMode={gameMode}
+                    onSelectCar={setSelectedCarId}
+                    onSelectMode={setGameMode}
+                    onUpgrade={handleUpgrade}
+                    onColorChange={handleColorChange}
+                    onStartRace={() => setGameState(GameState.RACING)}
+                    />
+                )}
+                
+                {gameState === GameState.RACING && (
+                    <RaceView 
+                    car={activeCar} 
+                    mode={gameMode}
+                    onRaceEnd={handleRaceEnd} 
+                    />
+                )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
